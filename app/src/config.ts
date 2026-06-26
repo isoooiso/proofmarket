@@ -1,30 +1,7 @@
-import demoConfigJson from "./demo-config.json";
+import { demoConfig } from "./demoConfig";
 
-export interface DemoFixtureSpec {
-  fixtureId: number;
-  seq: number;
-  statKeys: number[];
-  op: string | null;
-  yesThreshold: number;
-  label: string;
-}
-
-export interface DemoConfig {
-  programId: string;
-  txlineProgramId: string;
-  txlineApiBase: string;
-  mockUsdcMint: string;
-  mintDecimals: number;
-  keeperPubkey: string;
-  demoWalletA: string;
-  demoWalletB: string;
-  fixtures: {
-    over: DemoFixtureSpec;
-    under: DemoFixtureSpec;
-  };
-}
-
-export const demoConfig = demoConfigJson as DemoConfig;
+export type { DemoConfig, DemoFixtureSpec } from "./demoConfig";
+export { demoConfig };
 
 export const RPC_URL =
   import.meta.env.VITE_RPC_URL ?? "https://api.devnet.solana.com";
