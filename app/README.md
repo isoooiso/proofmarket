@@ -31,24 +31,24 @@ Single-page devnet demo for ProofMarket: create an O/U 2.5 market, deposit on OV
 
 5. Demo wallets should hold mock USDC from `npm run demo:setup` or `npm run fund:demo-wallets` at the repo root.
 
-### TxLINE API path (dev and production)
+### Local dev vs production (TxLINE proxy)
 
-The browser always calls:
+Both environments use the **same browser URL**: `/api/txline/<path>`.
 
-```text
-GET /api/txline/scores/stat-validation?...
-```
+| Environment | What handles `/api/txline/*` |
+|---------------|------------------------------|
+| `npm run dev` | Vite plugin in `vite.config.ts` (calls `api/txline/proxyCore.ts`) |
+| Vercel | Serverless function `api/txline/[...path].ts` |
 
-- **Local dev:** Vite middleware (`vite.config.ts`) runs the same proxy logic as production (`api/txline/proxyCore.ts`).
-- **Vercel:** Serverless function `api/txline/[...path].ts` forwards to `https://txline-dev.txodds.com/api/<path>` with server-side auth.
+Set `TXLINE_API_TOKEN` in repo root `.env` or `app/.env` for local dev. No `VITE_TXLINE_*` vars.
 
-No CORS issues; no TxLINE credentials in client code.
+Optional: run `npx vercel dev` from `app/` to use the real Vercel function locally (requires Vercel CLI login).
 
 ## Demo click-path (Turkey vs USA O/U 2.5)
 
 Fixture: **17926593**, final score **3-2** (total 5 → **OVER** wins vs line 2.5 / `yes_threshold=2`).
 
-1. Connect Phantom as wallet A (`demoWalletA` in `demo-config.json`).
+1. Connect Phantom as wallet A (`demoWalletA` in `demoConfig.ts`).
 2. **Reset demo** → **Create market** → **Deposit OVER** (e.g. 100 USDC).
 3. Switch to wallet B → **Deposit NO**.
 4. Switch back → **Settle market** → **Claim winnings** on the winning side.
@@ -67,12 +67,15 @@ Produces static assets in `dist/`.
 
 ### 1. Project settings
 
-- **Root directory:** `app` (if deploying from the monorepo, set this in Vercel → Settings → General).
-- **Framework preset:** Vite (or use `vercel.json` in this folder).
-- **Build command:** `npm run build`
-- **Output directory:** `dist`
+- **Root directory:** `app` (monorepo: set in Vercel → Settings → General).
+- **Do not** override build/output in the dashboard if `vercel.json` is present — it sets `buildCommand`, `outputDirectory`, and API functions.
+- If the dashboard Framework Preset is “Vite”, that is fine; `vercel.json` does **not** use `framework: vite` so `/api/*` serverless functions in `app/api/` are still deployed alongside the SPA.
 
-`vercel.json` already configures SPA fallback and `/api/*` serverless functions.
+`vercel.json` configures:
+
+- Vite SPA build → `dist/`
+- Serverless functions → `app/api/**/*.ts` (e.g. `/api/txline/scores/stat-validation` → `api/txline/[...path].ts`)
+- SPA fallback: non-`/api` routes → `index.html`
 
 ### 2. Environment variables (Vercel dashboard)
 
@@ -118,6 +121,6 @@ If TxLINE returns 401, the function mints a new guest JWT and retries once autom
 
 ## Notes
 
-- Program ID and mock USDC mint come from `src/demo-config.json`.
+- Program ID and mock USDC mint come from `src/demoConfig.ts`.
 - Market PDA seeds: `market`, authority, `fixture_id` (i64 LE), `yes_threshold` (i32 LE).
 - Settlement uses TxLINE `validate_stat` CPI — not a trusted operator callback.

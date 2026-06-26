@@ -5,12 +5,27 @@ import {
   proxyTxlineGet,
 } from "./proxyCore";
 
+/** Resolve TxLINE API sub-path from catch-all query or request URL. */
+function resolveApiPath(req: VercelRequest): string {
+  const fromQuery = joinPathSegments(req.query.path as string | string[] | undefined);
+  if (fromQuery) return fromQuery;
+
+  const pathname = (req.url ?? "").split("?")[0];
+  const prefix = "/api/txline/";
+  if (pathname.startsWith(prefix)) {
+    return pathname.slice(prefix.length);
+  }
+  return "";
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader("Content-Type", "application/json");
+
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed", method: req.method });
   }
 
-  const apiPath = joinPathSegments(req.query.path as string | string[] | undefined);
+  const apiPath = resolveApiPath(req);
   if (!apiPath) {
     return res.status(400).json({ error: "Missing TxLINE API path" });
   }
@@ -20,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(result.status).json(result.body);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error("[api/txline]", apiPath, message);
+    console.error("[api/txline] proxy failed", { path: apiPath, message });
     return res.status(500).json({ error: message });
   }
 }

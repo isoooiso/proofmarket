@@ -3,7 +3,7 @@ import axios from "axios";
 import { PublicKey } from "@solana/web3.js";
 import { dailyScoresRootsPda } from "./pdas";
 
-/** Browser calls this path in dev and production; auth is injected server-side. */
+/** Server-side proxy base — same path in dev (Vite middleware) and prod (Vercel function). */
 const TXLINE_API_BASE = "/api/txline";
 
 export type HashLike = string | number[];
