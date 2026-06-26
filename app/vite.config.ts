@@ -4,7 +4,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { config as dotenvConfig } from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { proxyTxlineGet } from "./api/txline/proxyCore";
+import { proxyTxlineGet, applyTxlineClientCacheHeaders } from "./api/txline/proxyCore";
 
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: path.resolve(appDir, "../.env") });
@@ -48,8 +48,18 @@ function txlineDevProxyPlugin(): Plugin {
 
         proxyTxlineGet(apiPath, query)
           .then((result) => {
-            res.statusCode = result.status;
+            applyTxlineClientCacheHeaders(res);
             res.setHeader("Content-Type", "application/json");
+            if (result.status === 304) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: "upstream returned 304 with no body" }));
+              return;
+            }
+            if (result.status >= 200 && result.status < 300) {
+              res.statusCode = 200;
+            } else {
+              res.statusCode = result.status;
+            }
             res.end(JSON.stringify(result.body));
           })
           .catch((e: unknown) => {

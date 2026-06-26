@@ -99,14 +99,33 @@ export async function fetchStatValidation(
   statKey: number,
   statKey2?: number
 ): Promise<RawValidation> {
-  const params: Record<string, number> = { fixtureId, seq, statKey };
+  const params: Record<string, number> = {
+    fixtureId,
+    seq,
+    statKey,
+    _cb: Date.now(),
+  };
   if (statKey2 != null) params.statKey2 = statKey2;
 
   const res = await axios.get(`${TXLINE_API_BASE}/scores/stat-validation`, {
     params,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
     validateStatus: () => true,
   });
+
+  const isEmptyBody =
+    res.data === null ||
+    res.data === undefined ||
+    (typeof res.data === "string" && res.data.trim() === "");
+
+  if (res.status === 304 || isEmptyBody) {
+    throw new Error(`empty/304 response from proxy (status ${res.status})`);
+  }
+
   if (res.status !== 200) {
     throw new Error(
       `stat-validation HTTP ${res.status}: ${JSON.stringify(res.data).slice(0, 300)}`
