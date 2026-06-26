@@ -45,6 +45,9 @@ import { marketPda, positionPda, PROGRAM_ID, TXLINE_PROGRAM_ID, vaultPda } from 
 import {
   buildReceipt,
   fetchStatValidation,
+  getProofStatSummary,
+  getValidationStatTotal,
+  isRawValidation,
   mapValidationToSettleArgs,
   type RawValidation,
   type ResolutionReceipt,
@@ -365,9 +368,10 @@ export default function MarketPage() {
           return;
         }
 
+        const balance = result.value;
         setUsdcWarning(null);
-        setUsdcBalance(result.value.rawBalance);
-        setUsdcAtaExists(result.value.ataExists);
+        setUsdcBalance(balance?.rawBalance ?? 0);
+        setUsdcAtaExists(balance?.ataExists ?? false);
         setUsdcLoadedOnce(true);
       } finally {
         if (requestId === usdcLoadSeqRef.current) {
@@ -438,9 +442,16 @@ export default function MarketPage() {
           return;
         }
 
+        const fetched = result.value;
+        if (!fetched?.side || !fetched?.amount) {
+          setPositionStatus("decode-error");
+          setPositionWarning("Position: decode error — use Force refresh position");
+          return;
+        }
+
         setPosition({
-          side: Number(result.value.side),
-          amount: Number(result.value.amount),
+          side: Number(fetched.side),
+          amount: Number(fetched.amount),
         });
         setPositionStatus("found");
         setPositionWarning(null);
@@ -464,7 +475,7 @@ export default function MarketPage() {
 
   const buildReceiptFromMarket = useCallback(
     (winningSide: number, marketPkForReceipt: PublicKey) => {
-      if (!proofPreview) return null;
+      if (!proofPreview || !isRawValidation(proofPreview)) return null;
       try {
         const args = mapValidationToSettleArgs(proofPreview, YES_THRESHOLD);
         const storedTx = localStorage.getItem(
@@ -766,6 +777,10 @@ export default function MarketPage() {
     fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B)
       .then((data) => {
         if (requestId !== proofLoadSeqRef.current) return;
+        if (!isRawValidation(data)) {
+          setError("TxLINE proof preview unavailable — invalid response");
+          return;
+        }
         setProofPreview(data);
       })
       .catch((e) => {
@@ -1179,7 +1194,11 @@ export default function MarketPage() {
     await ensureAuthorityFunded();
 
     const validation = proofPreview ?? await fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B);
-    const period = validation.statToProve.period;
+    const proofSummary = getProofStatSummary(validation);
+    if (!proofSummary) {
+      throw new Error("TxLINE proof missing stat values — try again later");
+    }
+    const period = proofSummary.period;
 
     setFrozenSnapshot(snapshotDisplay());
     setTxPending(true);
@@ -1344,8 +1363,8 @@ export default function MarketPage() {
         refreshMarket: true,
         refreshUsdc: false,
         optimistic: () => {
-          const total =
-            validation.statToProve.value + (validation.statToProve2?.value ?? 0);
+          const total = getValidationStatTotal(validation);
+          if (total == null) return;
           const winningSide = total > YES_THRESHOLD ? 1 : 2;
           setMarketState((prev) =>
             prev ? { ...prev, winningSide } : prev
@@ -1517,6 +1536,7 @@ export default function MarketPage() {
   })();
 
   const actionsDisabled = txPending;
+  const proofStatSummary = getProofStatSummary(proofPreview);
 
   return (
     <div className="app">
@@ -1877,12 +1897,13 @@ export default function MarketPage() {
 
           {isLoadingProof ? (
             <p className="muted">Loading proof preview…</p>
-          ) : proofPreview ? (
+          ) : proofStatSummary ? (
             <p className="muted">
-              Proof preview: {proofPreview.statToProve.value}-{proofPreview.statToProve2?.value ?? "?"} (total{" "}
-              {proofPreview.statToProve.value + (proofPreview.statToProve2?.value ?? 0)}) · period=
-              {proofPreview.statToProve.period}
+              Proof preview: {proofStatSummary.home}-{proofStatSummary.away} (total{" "}
+              {proofStatSummary.home + proofStatSummary.away}) · period={proofStatSummary.period}
             </p>
+          ) : proofPreview ? (
+            <p className="muted">Proof preview unavailable — invalid TxLINE response</p>
           ) : null}
 
           <div className="debug-panel" style={{ marginTop: "1rem" }}>

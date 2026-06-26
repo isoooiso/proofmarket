@@ -21,7 +21,7 @@ export async function fetchWalletUsdcBalance(
     const bal = await connection.getTokenAccountBalance(ata, "confirmed");
     return {
       ata,
-      rawBalance: Number(bal.value.amount),
+      rawBalance: Number(bal?.value?.amount ?? 0),
       ataExists: true,
     };
   } catch (e) {

@@ -36,6 +36,56 @@ export function toBytes32(h: HashLike): number[] {
   return Array.from(buf);
 }
 
+export function isRawValidation(data: unknown): data is RawValidation {
+  if (!data || typeof data !== "object") return false;
+  const v = data as RawValidation;
+  const st = v.statToProve;
+  if (!st || typeof st.key !== "number" || typeof st.value !== "number" || typeof st.period !== "number") {
+    return false;
+  }
+  if (!Array.isArray(v.statProof) || !Array.isArray(v.mainTreeProof) || !Array.isArray(v.subTreeProof)) {
+    return false;
+  }
+  if (!v.summary || typeof v.summary.fixtureId !== "number") return false;
+  if (
+    !v.summary.updateStats ||
+    typeof v.summary.updateStats.updateCount !== "number" ||
+    typeof v.summary.updateStats.minTimestamp !== "number" ||
+    typeof v.summary.updateStats.maxTimestamp !== "number"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function isRawValidationForSettle(data: unknown): data is RawValidation {
+  return (
+    isRawValidation(data) &&
+    data.statToProve2 != null &&
+    typeof data.statToProve2.value === "number" &&
+    Array.isArray(data.statProof2)
+  );
+}
+
+export function getProofStatSummary(
+  v: RawValidation | null | undefined
+): { home: number; away: number; period: number } | null {
+  if (!v?.statToProve || typeof v.statToProve.value !== "number") return null;
+  const away =
+    v.statToProve2 != null && typeof v.statToProve2.value === "number" ? v.statToProve2.value : 0;
+  return {
+    home: v.statToProve.value,
+    away,
+    period: v.statToProve.period,
+  };
+}
+
+export function getValidationStatTotal(v: RawValidation | null | undefined): number | null {
+  const summary = getProofStatSummary(v);
+  if (!summary) return null;
+  return summary.home + summary.away;
+}
+
 export const mapProof = (nodes: RawValidation["statProof"]) =>
   nodes.map((n) => ({ hash: toBytes32(n.hash), isRightSibling: n.isRightSibling }));
 
@@ -62,14 +112,23 @@ export async function fetchStatValidation(
       `stat-validation HTTP ${res.status}: ${JSON.stringify(res.data).slice(0, 300)}`
     );
   }
-  return res.data as RawValidation;
+  if (!isRawValidation(res.data)) {
+    throw new Error("stat-validation response missing required stat fields");
+  }
+  return res.data;
 }
 
 function mapStatTerm(
-  stat: { key: number; value: number; period: number },
+  stat: { key: number; value: number; period: number } | undefined,
   eventStatRoot: number[],
-  proof: RawValidation["statProof"]
+  proof: RawValidation["statProof"] | undefined
 ) {
+  if (!stat || typeof stat.value !== "number") {
+    throw new Error("stat-validation missing stat term value");
+  }
+  if (!proof) {
+    throw new Error("stat-validation missing stat proof");
+  }
   return {
     statToProve: { key: stat.key, value: stat.value, period: stat.period },
     eventStatRoot,
@@ -78,7 +137,7 @@ function mapStatTerm(
 }
 
 export function mapValidationToSettleArgs(v: RawValidation, yesThreshold: number) {
-  if (!v.statToProve2 || !v.statProof2) {
+  if (!isRawValidationForSettle(v)) {
     throw new Error("stat-validation missing statToProve2 / statProof2");
   }
 
@@ -150,6 +209,9 @@ export function buildReceipt(
   rootsPda: PublicKey,
   settleTx: string
 ): ResolutionReceipt {
+  if (!v.statToProve || typeof v.statToProve.value !== "number") {
+    throw new Error("stat-validation missing statToProve value");
+  }
   const home = v.statToProve.value;
   const away = v.statToProve2?.value ?? 0;
   return {
