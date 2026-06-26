@@ -54,8 +54,8 @@ After a market resolves, the UI renders a **resolution receipt**: the final scor
 
 ## Live links
 
-- **Live app (devnet):** _<your Vercel URL>_
-- **Demo video:** _<your YouTube/Loom link>_
+- **Live app (devnet):** https://proofmarket-o7m2pltr1-proofmarket.vercel.app/
+- **Demo video:** https://youtu.be/fM0zy-uA-rY
 - **Solana program (devnet):** [`9ZQJXjeop6xGjFAEvVTgHvWiBnbkVB9AMxo4D8aihxZs`](https://explorer.solana.com/address/9ZQJXjeop6xGjFAEvVTgHvWiBnbkVB9AMxo4D8aihxZs?cluster=devnet)
 - **TxLINE program (devnet):** [`6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J`](https://explorer.solana.com/address/6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J?cluster=devnet)
 - **Technical documentation:** [`docs/TECHNICAL.md`](docs/TECHNICAL.md)
