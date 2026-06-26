@@ -1,0 +1,20 @@
+.env
+.env.*
+!.env.example
+*-keypair.json
+devnet-wallet.json
+demo-config.json
+id.json
+
+# deps / build
+node_modules/
+target/
+!target/idl/
+!target/types/
+dist/
+app/node_modules/
+app/dist/
+
+# misc
+.DS_Store
+*.log

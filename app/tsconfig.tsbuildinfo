@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/marketpage.tsx","./src/anchorutils.ts","./src/config.ts","./src/main.tsx","./src/pdas.ts","./src/txline.ts","./src/vite-env.d.ts","./src/idl/proofmarket.ts"],"errors":true,"version":"5.9.3"}

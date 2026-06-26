@@ -1,0 +1,350 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: #0f1419;
+  color: #e7ecf3;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: #6eb5ff;
+}
+
+.app {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.sub {
+  color: #8b98a8;
+  font-size: 0.9rem;
+}
+
+.card {
+  background: #1a222d;
+  border: 1px solid #2a3544;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.pools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.pool {
+  background: #121820;
+  border-radius: 8px;
+  padding: 0.85rem;
+  border: 1px solid #2a3544;
+}
+
+.pool.over {
+  border-color: #3d6f4a;
+}
+
+.pool.no {
+  border-color: #6f3d4a;
+}
+
+.pool-label {
+  font-size: 0.8rem;
+  color: #8b98a8;
+  margin-bottom: 0.25rem;
+}
+
+.pool-amount {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #2a3544;
+}
+
+.status-badge.open {
+  background: #1e3a2f;
+  color: #7dcea0;
+}
+
+.status-badge.resolved {
+  background: #2d3140;
+  color: #c9d4e3;
+}
+
+button.action {
+  background: #2f6fed;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+button.action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.action.secondary {
+  background: #2a3544;
+}
+
+input[type="number"],
+select {
+  background: #121820;
+  border: 1px solid #2a3544;
+  color: #e7ecf3;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+
+.msg {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #121820;
+  font-size: 0.85rem;
+}
+
+.msg.error {
+  border: 1px solid #8b3a3a;
+  color: #f5b0b0;
+}
+
+.msg.ok {
+  border: 1px solid #3d6f4a;
+  color: #b8e6c8;
+}
+
+.receipt {
+  background: #121820;
+  border: 1px solid #3d6f4a;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-top: 0.75rem;
+}
+
+.receipt h3 {
+  margin: 0 0 0.75rem;
+  color: #7dcea0;
+}
+
+.receipt dl {
+  margin: 0;
+}
+
+.receipt dt {
+  color: #8b98a8;
+  font-size: 0.8rem;
+}
+
+.receipt dd {
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: #8b98a8;
+  font-size: 0.85rem;
+}
+
+.toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.toggle button {
+  flex: 1;
+  padding: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid #2a3544;
+  background: #121820;
+  color: #e7ecf3;
+  cursor: pointer;
+}
+
+.toggle button.active.over {
+  background: #1e3a2f;
+  border-color: #3d6f4a;
+}
+
+.demo-controls {
+  border-color: #3a4a5c;
+}
+
+.status-badge.fresh {
+  background: #2a3a4f;
+  color: #9ec5ff;
+}
+
+.toggle button.active.no {
+  background: #3a1e28;
+  border-color: #6f3d4a;
+}
+
+.tx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 20, 25, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+
+.tx-overlay-box {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: #1a222d;
+  border: 1px solid #3d6f4a;
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.95rem;
+  color: #b8e6c8;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #2a3544;
+  border-top-color: #7dcea0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.debug-panel h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+  color: #9aa8b8;
+}
+
+.debug-panel dl {
+  margin: 0;
+}
+
+.debug-panel dt {
+  font-size: 0.75rem;
+  color: #7a8898;
+}
+
+.debug-panel dd {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.collapsible {
+  margin-top: 0.75rem;
+  border: 1px solid #2a3544;
+  border-radius: 8px;
+  background: #121820;
+}
+
+.collapsible summary {
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: #9aa8b8;
+  user-select: none;
+  list-style: none;
+}
+
+.collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible summary::before {
+  content: "▸ ";
+  color: #6b7a8c;
+}
+
+.collapsible[open] summary::before {
+  content: "▾ ";
+}
+
+.collapsible[open] summary {
+  border-bottom: 1px solid #2a3544;
+}
+
+.collapsible-inner {
+  padding: 0.85rem;
+}
+
+button.action.small {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.demo-reset-bar {
+  padding: 0.75rem 1rem;
+}
+
+.demo-reset-row {
+  align-items: center;
+  gap: 1rem;
+}
+
+.demo-reset-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}

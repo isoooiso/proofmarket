@@ -1,0 +1,33 @@
+{
+  "name": "proofmarket-derisk",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Day-1 de-risk kit: reproduce TxLINE validate_stat on devnet and measure compute",
+  "scripts": {
+    "wallet": "tsx src/gen_wallet.ts",
+    "subscribe": "tsx src/subscribe_activate.ts",
+    "derisk": "tsx src/derisk_validate_stat.ts",
+    "typecheck": "tsc --noEmit",
+    "diagnose": "tsx src/diagnose.ts",
+    "validate:stat": "tsx src/validate-stat.ts",
+    "pick": "tsx scripts/pick_fixture.ts",
+    "demo:setup": "tsx scripts/setup_demo.ts",
+    "fund:demo-wallets": "tsx scripts/fund_demo_wallets.ts",
+    "test:smoke": "tsx tests/smoke_lifecycle.ts",
+    "test:smoke2": "tsx tests/smoke_two_stat.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.95.4",
+    "axios": "^1.7.7",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

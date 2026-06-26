@@ -1,0 +1,36 @@
+[
+  {
+    "fixtureId": 17926593,
+    "teams": "Turkey vs USA",
+    "maxSeq": 1097,
+    "statusIds": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "home": 3,
+    "away": 2,
+    "total": 5,
+    "period": 0,
+    "ou_result": "OVER"
+  },
+  {
+    "fixtureId": 17588229,
+    "teams": "Paraguay vs Australia",
+    "maxSeq": 887,
+    "statusIds": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "home": 0,
+    "away": 0,
+    "total": 0,
+    "period": 0,
+    "ou_result": "UNDER"
+  }
+]
