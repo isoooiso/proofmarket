@@ -1,6 +1,12 @@
 export default async function handler(req: any, res: any) {
+  function json(status: number, body: any) {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(body));
+  }
+
   if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return json(405, { error: "Method not allowed" });
   }
 
   const base = process.env.TXLINE_API_BASE || "https://txline-dev.txodds.com/api";
@@ -8,9 +14,11 @@ export default async function handler(req: any, res: any) {
   const apiToken = process.env.TXLINE_API_TOKEN;
 
   if (!jwt || !apiToken) {
-    return res.status(500).json({
+    return json(500, {
       error: "Missing TxLINE environment variables",
       required: ["TXLINE_JWT", "TXLINE_API_TOKEN"],
+      hasJwt: Boolean(jwt),
+      hasApiToken: Boolean(apiToken),
     });
   }
 
@@ -19,6 +27,7 @@ export default async function handler(req: any, res: any) {
 
   for (const key of ["fixtureId", "seq", "statKey", "statKey2"]) {
     const value = query[key];
+
     if (Array.isArray(value)) {
       if (value[0]) params.set(key, value[0]);
     } else if (value !== undefined && value !== null) {
@@ -27,7 +36,7 @@ export default async function handler(req: any, res: any) {
   }
 
   if (!params.get("fixtureId") || !params.get("seq") || !params.get("statKey")) {
-    return res.status(400).json({
+    return json(400, {
       error: "Missing required query params",
       required: ["fixtureId", "seq", "statKey"],
       optional: ["statKey2"],
@@ -49,10 +58,11 @@ export default async function handler(req: any, res: any) {
     const contentType = upstream.headers.get("content-type") || "application/json";
     const body = await upstream.text();
 
-    res.setHeader("content-type", contentType);
-    return res.status(upstream.status).send(body);
+    res.statusCode = upstream.status;
+    res.setHeader("Content-Type", contentType);
+    res.end(body);
   } catch (error: any) {
-    return res.status(500).json({
+    return json(500, {
       error: "TxLINE proxy failed",
       message: error?.message || String(error),
     });
