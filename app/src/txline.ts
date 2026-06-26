@@ -117,6 +117,22 @@ export async function fetchStatValidation(
     validateStatus: () => true,
   });
 
+  const contentType = String(res.headers["content-type"] ?? "");
+  const bodyText =
+    typeof res.data === "string"
+      ? res.data
+      : typeof res.data === "object" && res.data !== null
+        ? ""
+        : String(res.data ?? "");
+  if (
+    contentType.includes("text/html") ||
+    bodyText.trim().toLowerCase().startsWith("<!doctype")
+  ) {
+    throw new Error(
+      `proxy returned HTML (routing misconfig), not JSON (status ${res.status})`
+    );
+  }
+
   const isEmptyBody =
     res.data === null ||
     res.data === undefined ||
