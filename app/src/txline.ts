@@ -132,7 +132,13 @@ export async function fetchStatValidation(
     );
   }
   if (!isRawValidation(res.data)) {
-    throw new Error("stat-validation response missing required stat fields");
+    const preview =
+      typeof res.data === "string"
+        ? res.data.slice(0, 200)
+        : JSON.stringify(res.data).slice(0, 200);
+    throw new Error(
+      `stat-validation response missing required stat fields (HTTP ${res.status}): ${preview}`
+    );
   }
   return res.data;
 }

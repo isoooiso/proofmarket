@@ -4,6 +4,8 @@ export interface DemoFixtureSpec {
   statKeys: number[];
   op: string | null;
   yesThreshold: number;
+  /** Stat period passed to create_market (from fixture metadata; settle uses TxLINE proof). */
+  period: number;
   label: string;
 }
 
@@ -39,6 +41,7 @@ export const demoConfig: DemoConfig = {
       statKeys: [1, 2],
       op: "Add",
       yesThreshold: 2,
+      period: 0,
       label: "Turkey vs USA",
     },
     under: {
@@ -47,6 +50,7 @@ export const demoConfig: DemoConfig = {
       statKeys: [1],
       op: null,
       yesThreshold: 0,
+      period: 0,
       label: "single-stat under demo",
     },
   },

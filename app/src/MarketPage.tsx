@@ -104,6 +104,7 @@ const SEQ = fixture.seq;
 const STAT_A = fixture.statKeys[0];
 const STAT_B = fixture.statKeys[1];
 const YES_THRESHOLD = fixture.yesThreshold;
+const MARKET_PERIOD = fixture.period;
 
 type PositionStatus =
   | "found"
@@ -162,7 +163,6 @@ export default function MarketPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [proofPreview, setProofPreview] = useState<RawValidation | null>(null);
-  const [isLoadingProof, setIsLoadingProof] = useState(true);
 
   const [authorityKeypair, setAuthorityKeypair] = useState<Keypair | null>(() =>
     loadDemoAuthority()
@@ -213,7 +213,6 @@ export default function MarketPage() {
 
   const marketLoadSeqRef = useRef(0);
   const traderLoadSeqRef = useRef(0);
-  const proofLoadSeqRef = useRef(0);
   const receiptLoadSeqRef = useRef(0);
   const usdcLoadSeqRef = useRef(0);
   const programRef = useRef<ReturnType<typeof getProgram> | null>(null);
@@ -772,28 +771,6 @@ export default function MarketPage() {
   }, [activeMarketPkStr, readyFreshMarket, programReady]);
 
   useEffect(() => {
-    const requestId = ++proofLoadSeqRef.current;
-    setIsLoadingProof(true);
-    fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B)
-      .then((data) => {
-        if (requestId !== proofLoadSeqRef.current) return;
-        if (!isRawValidation(data)) {
-          setError("TxLINE proof preview unavailable — invalid response");
-          return;
-        }
-        setProofPreview(data);
-      })
-      .catch((e) => {
-        if (requestId !== proofLoadSeqRef.current) return;
-        setError(formatUserError(e));
-      })
-      .finally(() => {
-        if (requestId !== proofLoadSeqRef.current) return;
-        setIsLoadingProof(false);
-      });
-  }, []);
-
-  useEffect(() => {
     if (
       !activeMarketPkStr ||
       marketWinningSide === null ||
@@ -870,64 +847,54 @@ export default function MarketPage() {
     return "not-created";
   }, [readyFreshMarket, marketExists, createdMarketSession, displayMarketOpen]);
 
-  const statusLabel =
-    marketStatus === "ready"
-      ? "Ready to create fresh market"
-      : marketStatus === "not-created"
-        ? isLoadingMarket
-          ? "Checking market on devnet..."
-          : "Not created"
-        : marketStatus === "open"
-          ? createdMarketSession && marketDecodePending
-            ? "Open (confirmed)"
-            : "Open"
-          : display.marketState?.winningSide === 1
-            ? "Resolved: OVER"
-            : "Resolved: NO";
-
   const userPositionPk =
     wallet.publicKey && activeMarketPk
       ? positionPda(activeMarketPk, wallet.publicKey)
       : null;
 
-  const marketConfirmedNotFound =
-    !isLoadingMarket && !!authorityKeypair && !!marketPk && !!program && !marketExists;
+  const marketCheckComplete =
+    !authorityKeypair || !program || marketExists || createdMarketSession != null || !isLoadingMarket;
 
-  const createInputs = {
-    walletConnected: wallet.connected,
-    walletPublicKey: Boolean(wallet.publicKey),
-    authorityKeypair: Boolean(authorityKeypair),
-    program: Boolean(program),
-    marketPk: Boolean(marketPk),
-    readyFreshMarket,
-    marketConfirmedNotFound,
-    marketExists,
-    isLoadingMarket,
-    isLoadingProof,
-    txPending,
-  };
+  const hasActiveMarket = marketExists || createdMarketSession != null;
 
-  const canCreateMarket =
-    createInputs.walletConnected &&
-    createInputs.walletPublicKey &&
-    createInputs.authorityKeypair &&
-    createInputs.program &&
-    createInputs.marketPk &&
-    !createInputs.txPending &&
-    (createInputs.readyFreshMarket || createInputs.marketConfirmedNotFound);
+  const needsStartNewMarket =
+    wallet.connected &&
+    !!program &&
+    marketCheckComplete &&
+    !hasActiveMarket &&
+    !displayMarketResolved;
 
-  const createDisabledReason = (() => {
-    if (canCreateMarket) return null;
+  const showSecondaryReset =
+    wallet.connected && (hasActiveMarket || !!authorityKeypair) && !needsStartNewMarket;
+
+  const canStartNewMarket = needsStartNewMarket && !txPending;
+
+  const startNewMarketDisabledReason = (() => {
+    if (canStartNewMarket) return null;
     if (txPending) return "Confirming transaction…";
-    if (!wallet.connected || !wallet.publicKey) return "Connect Phantom wallet";
-    if (!authorityKeypair) return "Click Reset demo to start a fresh market";
+    if (!wallet.connected || !wallet.publicKey) return "Connect Phantom wallet first";
     if (!program) return "Wallet adapter not ready — reconnect Phantom";
-    if (!marketPk) return "Market PDA unavailable";
-    if (marketExists) return "Market already exists on this PDA";
-    if (isLoadingMarket && !readyFreshMarket) return "Checking market on devnet…";
-    if (isLoadingProof) return "Loading TxLINE proof…";
-    return "Create market unavailable";
+    if (isLoadingMarket) return "Checking for an existing market on devnet…";
+    if (hasActiveMarket) return "Market already active";
+    return null;
   })();
+
+  const statusLabel =
+    needsStartNewMarket && !isLoadingMarket
+      ? "Not started"
+      : marketStatus === "ready"
+        ? "Ready for market"
+        : marketStatus === "not-created"
+          ? isLoadingMarket
+            ? "Checking market on devnet..."
+            : "Not started"
+          : marketStatus === "open"
+            ? createdMarketSession && marketDecodePending
+              ? "Open (confirmed)"
+              : "Open"
+            : display.marketState?.winningSide === 1
+              ? "Resolved: OVER"
+              : "Resolved: NO";
 
   async function ensureUserAta(): Promise<PublicKey> {
     if (!wallet.publicKey) throw new Error("Connect wallet");
@@ -1033,11 +1000,10 @@ export default function MarketPage() {
     return sig;
   }
 
-  async function ensureAuthorityFunded(): Promise<void> {
-    if (!authorityKeypair) throw new Error("Click Reset demo to start a fresh market");
+  async function ensureAuthorityFundedFor(authority: PublicKey): Promise<void> {
     const result = await safeRpc(
-      `authority balance check ${authorityKeypair.publicKey.toBase58()}`,
-      () => connection.getBalance(authorityKeypair.publicKey)
+      `authority balance check ${authority.toBase58()}`,
+      () => connection.getBalance(authority)
     );
     if (!result.ok) {
       if (result.rateLimited) {
@@ -1049,7 +1015,7 @@ export default function MarketPage() {
     const minLamports = Math.floor(0.01 * LAMPORTS_PER_SOL);
     if (result.value < minLamports) {
       throw new Error(
-        `Ephemeral authority has no SOL (${(result.value / LAMPORTS_PER_SOL).toFixed(4)} SOL). Click Reset demo to fund it.`
+        `Ephemeral authority has no SOL (${(result.value / LAMPORTS_PER_SOL).toFixed(4)} SOL). Click Start new market to fund it.`
       );
     }
   }
@@ -1096,24 +1062,76 @@ export default function MarketPage() {
     refreshAuthoritySolRef.current("force refresh authority");
   }
 
-  async function handleResetDemo() {
-    if (!wallet.publicKey) {
-      setError("Connect Phantom before resetting the demo");
+  async function executeCreateMarket(
+    authority: Keypair,
+    targetMarketPk: PublicKey
+  ): Promise<string> {
+    const prog = programRef.current;
+    if (!prog || !wallet.publicKey) throw new Error("Wallet not ready");
+    await ensureAuthorityFundedFor(authority.publicKey);
+
+    const createIx = await pm(prog).methods
+      .createMarket(
+        new anchor.BN(FIXTURE_ID),
+        MARKET_PERIOD,
+        STAT_A,
+        STAT_B,
+        { add: {} },
+        YES_THRESHOLD
+      )
+      .accounts({
+        authority: authority.publicKey,
+        usdcMint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .instruction();
+
+    const tx = new Transaction().add(createIx);
+    const sig = await sendWalletTxWithExtraSigners(tx, [authority]);
+
+    console.debug("[Create market] tx confirmed", {
+      sig,
+      marketPk: targetMarketPk.toBase58(),
+      authority: authority.publicKey.toBase58(),
+    });
+
+    setReadyFreshMarket(false);
+    confirmCreatedMarketOpen(targetMarketPk, sig, authority.publicKey, false);
+
+    if (DEMO_SAFE_MODE) {
+      await fetchMarketOnce(targetMarketPk, "create confirmed");
+    } else {
+      await pollMarketAfterCreate(targetMarketPk, sig, authority.publicKey);
+    }
+    await refreshUsdcBalance("create market confirmed");
+    await refreshPositionForWallet("create market confirmed");
+
+    return sig;
+  }
+
+  async function handleStartNewMarket() {
+    if (!wallet.publicKey || !program) {
+      setError("Connect Phantom before starting a new market");
       return;
     }
 
     applyResetUiClear();
+    setProofPreview(null);
     setTxPending(true);
     setError(null);
-    setStatusMsg("Reset demo…");
+    setStatusMsg("Starting new market…");
 
     try {
       const kp = Keypair.generate();
+      const targetMarketPk = marketPda(kp.publicKey, FIXTURE_ID, YES_THRESHOLD);
       saveDemoAuthority(kp);
       setAuthorityKeypair(kp);
-      setLastAuthorityChangeReason("reset demo");
+      setLastAuthorityChangeReason("start new market");
+      marketInitFetchedForPkRef.current = targetMarketPk.toBase58();
       console.debug("authority changed", {
-        reason: "reset demo",
+        reason: "start new market",
         authority: kp.publicKey.toBase58(),
       });
 
@@ -1126,13 +1144,12 @@ export default function MarketPage() {
         })
       );
       const fundSig = await sendWalletTx(fundTx);
+      await refreshAuthoritySol("start new market funded");
 
-      await refreshAuthoritySol("reset demo funded");
-      setIsLoadingMarket(false);
-      setIsLoadingPools(false);
-      setIsLoadingPosition(false);
+      setStatusMsg("Creating market on devnet…");
+      const createSig = await executeCreateMarket(kp, targetMarketPk);
       setStatusMsg(
-        `Reset complete — new authority ${kp.publicKey.toBase58()} funded ${DEMO_AUTHORITY_FUND_SOL} SOL (${fundSig})`
+        `Market ready — deposit OVER or NO (create tx: ${createSig}, fund tx: ${fundSig})`
       );
     } catch (e) {
       setError(formatUserError(e));
@@ -1189,71 +1206,6 @@ export default function MarketPage() {
     setError(null);
   }
 
-  async function handleCreateMarket() {
-    if (!program || !wallet.publicKey || !authorityKeypair || !marketPk) return;
-    await ensureAuthorityFunded();
-
-    const validation = proofPreview ?? await fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B);
-    const proofSummary = getProofStatSummary(validation);
-    if (!proofSummary) {
-      throw new Error("TxLINE proof missing stat values — try again later");
-    }
-    const period = proofSummary.period;
-
-    setFrozenSnapshot(snapshotDisplay());
-    setTxPending(true);
-    setError(null);
-    setStatusMsg("Create market…");
-
-    try {
-      const createIx = await pm(program).methods
-        .createMarket(
-          new anchor.BN(FIXTURE_ID),
-          period,
-          STAT_A,
-          STAT_B,
-          { add: {} },
-          YES_THRESHOLD
-        )
-        .accounts({
-          authority: authorityKeypair.publicKey,
-          usdcMint: mint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: SYSVAR_RENT_PUBKEY,
-        })
-        .instruction();
-
-      const tx = new Transaction().add(createIx);
-      const sig = await sendWalletTxWithExtraSigners(tx, [authorityKeypair]);
-
-      console.debug("[Create market] tx confirmed", {
-        sig,
-        marketPk: marketPk.toBase58(),
-        authority: authorityKeypair.publicKey.toBase58(),
-      });
-
-      setStatusMsg(`Open (confirmed) — create market confirmed: ${sig}`);
-      setReadyFreshMarket(false);
-
-      confirmCreatedMarketOpen(marketPk, sig, authorityKeypair.publicKey, false);
-
-      if (DEMO_SAFE_MODE) {
-        await fetchMarketOnce(marketPk, "create confirmed");
-      } else {
-        await pollMarketAfterCreate(marketPk, sig, authorityKeypair.publicKey);
-      }
-      await refreshUsdcBalance("create market confirmed");
-      await refreshPositionForWallet("create market confirmed");
-    } catch (e) {
-      setError(formatUserError(e));
-      setStatusMsg(null);
-    } finally {
-      setTxPending(false);
-      setFrozenSnapshot(null);
-    }
-  }
-
   async function handleDeposit() {
     if (!program || !wallet.publicKey || !activeMarketPk || !activeVaultPk) return;
     const raw = parseUsdcInput(depositAmount);
@@ -1304,10 +1256,14 @@ export default function MarketPage() {
   async function handleSettle() {
     if (!program || !wallet.publicKey || !activeMarketPk) return;
 
-    const validation = await fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B);
-    const args = mapValidationToSettleArgs(validation, YES_THRESHOLD);
+    try {
+      setStatusMsg("Loading TxLINE settlement proof…");
+      const validation = await fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B);
+      setProofPreview(validation);
+      const args = mapValidationToSettleArgs(validation, YES_THRESHOLD);
+      setStatusMsg(null);
 
-    await runAction(
+      await runAction(
       "Settle market",
       async () => {
         const settleIx = await pm(program).methods
@@ -1369,11 +1325,27 @@ export default function MarketPage() {
           setMarketState((prev) =>
             prev ? { ...prev, winningSide } : prev
           );
-          const built = buildReceiptFromMarket(winningSide, activeMarketPk);
-          if (built) setReceipt(built);
+          try {
+            const storedTx =
+              localStorage.getItem(SETTLE_TX_STORAGE_PREFIX + activeMarketPk.toBase58()) ?? "";
+            const built = buildReceipt(
+              validation,
+              YES_THRESHOLD,
+              winningSide,
+              args.rootsPda,
+              storedTx
+            );
+            setReceipt(built);
+          } catch {
+            /* receipt builds after settle tx is stored */
+          }
         },
       }
     );
+    } catch (e) {
+      setError(formatUserError(e));
+      setStatusMsg(null);
+    }
   }
 
   async function handleClaim() {
@@ -1450,7 +1422,8 @@ export default function MarketPage() {
     if (!wallet.connected || !wallet.publicKey) return "Connect Phantom wallet";
     if (marketStatus !== "open") {
       if (marketStatus === "resolved") return "Market already resolved";
-      if (marketStatus === "ready") return "Reset demo and create a market first";
+      if (marketStatus === "ready") return "Click Start new market first";
+      if (needsStartNewMarket) return "Click Start new market first";
       return "Market not created yet";
     }
     if (isLoadingUsdc && !usdcLoadedOnce) return "Loading USDC balance";
@@ -1535,6 +1508,19 @@ export default function MarketPage() {
     return "Claim unavailable";
   })();
 
+  async function handleLoadProofPreview() {
+    setError(null);
+    setStatusMsg("Loading TxLINE proof preview…");
+    try {
+      const validation = await fetchStatValidation(FIXTURE_ID, SEQ, STAT_A, STAT_B);
+      setProofPreview(validation);
+      setStatusMsg("Proof preview loaded");
+    } catch (e) {
+      setError(formatUserError(e));
+      setStatusMsg(null);
+    }
+  }
+
   const actionsDisabled = txPending;
   const proofStatSummary = getProofStatSummary(proofPreview);
 
@@ -1558,18 +1544,40 @@ export default function MarketPage() {
       </header>
 
       <div className="card demo-reset-bar">
-        <div className="row demo-reset-row">
-          <button
-            className="action secondary small"
-            disabled={actionsDisabled || !wallet.connected}
-            onClick={() => handleResetDemo()}
-          >
-            Reset demo
-          </button>
-          <p className="muted demo-reset-hint">
-            Use Reset demo only before starting a new recording take.
-          </p>
-        </div>
+        {needsStartNewMarket ? (
+          <>
+            <h2 style={{ marginTop: 0 }}>Get started</h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Click to create a fresh demo market — generates an ephemeral authority, funds it, and
+              opens the O/U market on devnet.
+            </p>
+            <div className="row demo-reset-row">
+              <button
+                className="action"
+                disabled={!canStartNewMarket}
+                onClick={() => handleStartNewMarket()}
+              >
+                Start new market
+              </button>
+            </div>
+            {startNewMarketDisabledReason && (
+              <p className="muted demo-reset-hint">{startNewMarketDisabledReason}</p>
+            )}
+          </>
+        ) : showSecondaryReset ? (
+          <div className="row demo-reset-row">
+            <button
+              className="action secondary small"
+              disabled={actionsDisabled}
+              onClick={() => handleStartNewMarket()}
+            >
+              Reset / New market
+            </button>
+            <p className="muted demo-reset-hint">
+              Start a fresh recording take with a new ephemeral authority and market.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className="card market-card">
@@ -1614,21 +1622,13 @@ export default function MarketPage() {
 
       <div className="card">
         <h2>Actions</h2>
-        <div className="row" style={{ marginBottom: "0.75rem" }}>
-          <button
-            className="action"
-            disabled={!canCreateMarket}
-            onClick={() => handleCreateMarket()}
-          >
-            Create market
-          </button>
-        </div>
-        {createDisabledReason && (
+        {needsStartNewMarket ? (
           <p className="muted" style={{ marginBottom: "0.75rem" }}>
-            {createDisabledReason}
+            Connect Phantom and click <strong>Start new market</strong> above to open the market,
+            then deposit OVER or NO.
           </p>
-        )}
-
+        ) : (
+          <>
         <details className="collapsible">
           <summary>Demo funding</summary>
           <div className="collapsible-inner">
@@ -1734,6 +1734,8 @@ export default function MarketPage() {
           <p className="muted" style={{ marginBottom: "0.75rem" }}>
             {claimDisabledReason}
           </p>
+        )}
+          </>
         )}
 
         {statusMsg && (
@@ -1895,16 +1897,25 @@ export default function MarketPage() {
             </p>
           )}
 
-          {isLoadingProof ? (
-            <p className="muted">Loading proof preview…</p>
-          ) : proofStatSummary ? (
+          {proofStatSummary ? (
             <p className="muted">
               Proof preview: {proofStatSummary.home}-{proofStatSummary.away} (total{" "}
               {proofStatSummary.home + proofStatSummary.away}) · period={proofStatSummary.period}
             </p>
-          ) : proofPreview ? (
-            <p className="muted">Proof preview unavailable — invalid TxLINE response</p>
-          ) : null}
+          ) : (
+            <p className="muted">
+              Proof loads when you settle (or use Load proof preview below).
+            </p>
+          )}
+          <div className="row" style={{ marginBottom: "0.75rem" }}>
+            <button
+              className="action secondary small"
+              disabled={actionsDisabled}
+              onClick={() => handleLoadProofPreview()}
+            >
+              Load proof preview
+            </button>
+          </div>
 
           <div className="debug-panel" style={{ marginTop: "1rem" }}>
             <h3>Debug state</h3>
