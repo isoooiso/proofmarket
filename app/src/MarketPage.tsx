@@ -61,6 +61,7 @@ const DEMO_SAFE_MODE =
   import.meta.env.VITE_DEMO_SAFE_MODE !== "0";
 
 const POSITION_FETCH_TIMEOUT_MS = 15000;
+const MARKET_POLL_INTERVAL_MS = 10000;
 
 /** Anchor client uses camelCase; hand-generated IDL types use snake_case. */
 function pm(program: NonNullable<ReturnType<typeof getProgram>>) {
@@ -224,10 +225,17 @@ export default function MarketPage() {
   const refreshUsdcBalanceRef = useRef<(reason: string) => Promise<void>>(async () => {});
   const refreshPositionRef = useRef<(reason: string) => Promise<void>>(async () => {});
   const refreshAuthoritySolRef = useRef<(reason: string) => Promise<void>>(async () => {});
+  const marketExistsRef = useRef(marketExists);
+  const createdMarketSessionRef = useRef(createdMarketSession);
+  marketExistsRef.current = marketExists;
+  createdMarketSessionRef.current = createdMarketSession;
 
   const mint = useMemo(() => new PublicKey(demoConfig.mockUsdcMint), []);
 
-  const marketAuthority = authorityKeypair?.publicKey ?? null;
+  const marketAuthority = useMemo(
+    () => authorityKeypair?.publicKey ?? null,
+    [authorityKeypair]
+  );
 
   const marketPk = useMemo(() => {
     if (!marketAuthority) return null;
@@ -250,16 +258,20 @@ export default function MarketPage() {
     [activeMarketPk]
   );
 
+  const walletPublicKey = wallet.publicKey;
+  const signTransaction = wallet.signTransaction;
+  const signAllTransactions = wallet.signAllTransactions;
+
   const anchorWallet = useMemo(() => {
-    if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) {
+    if (!walletPublicKey || !signTransaction || !signAllTransactions) {
       return null;
     }
     return {
-      publicKey: wallet.publicKey,
-      signTransaction: wallet.signTransaction,
-      signAllTransactions: wallet.signAllTransactions,
+      publicKey: walletPublicKey,
+      signTransaction,
+      signAllTransactions,
     };
-  }, [wallet]);
+  }, [walletPublicKey, signTransaction, signAllTransactions]);
 
   const program = useMemo(() => {
     if (!anchorWallet) return null;
@@ -365,7 +377,7 @@ export default function MarketPage() {
         }
       }
     },
-    [connection, mint, wallet.publicKey]
+    [connection, mint, walletPublicKey]
   );
 
   refreshUsdcBalanceRef.current = refreshUsdcBalance;
@@ -440,7 +452,7 @@ export default function MarketPage() {
         }
       }
     },
-    [wallet.publicKey, activeMarketPk]
+    [walletPublicKey, activeMarketPk]
   );
 
   refreshPositionRef.current = refreshPositionForWallet;
@@ -492,15 +504,26 @@ export default function MarketPage() {
         authority: m.authority.toBase58(),
       };
 
-      setMarketExists(true);
-      setMarketState(nextMarket);
+      setMarketExists((prev) => (prev ? prev : true));
+      setMarketState((prev) => {
+        if (
+          prev &&
+          prev.poolYes === nextMarket.poolYes &&
+          prev.poolNo === nextMarket.poolNo &&
+          prev.winningSide === nextMarket.winningSide &&
+          prev.authority === nextMarket.authority
+        ) {
+          return prev;
+        }
+        return nextMarket;
+      });
       setIsLoadingMarket(false);
       setIsLoadingPools(false);
-      setReadyFreshMarket(false);
-      setMarketAwaitingRpc(false);
-      setMarketDecodePending(false);
-      setReceipt(null);
-      setIsLoadingReceipt(false);
+      setReadyFreshMarket((prev) => (prev ? false : prev));
+      setMarketAwaitingRpc((prev) => (prev ? false : prev));
+      setMarketDecodePending((prev) => (prev ? false : prev));
+      setReceipt((prev) => (prev === null ? prev : null));
+      setIsLoadingReceipt((prev) => (prev ? false : prev));
 
       console.debug("[Market refresh] account applied", {
         marketPk: targetMarketPk.toBase58(),
@@ -518,10 +541,14 @@ export default function MarketPage() {
       targetMarketPk: PublicKey,
       reason: string
     ): Promise<boolean> => {
-      if (marketRefreshInFlightRef.current) return marketExists || createdMarketSession != null;
+      if (marketRefreshInFlightRef.current) {
+        return marketExistsRef.current || createdMarketSessionRef.current != null;
+      }
 
       const prog = programRef.current;
-      if (!prog) return marketExists || createdMarketSession != null;
+      if (!prog) {
+        return marketExistsRef.current || createdMarketSessionRef.current != null;
+      }
 
       const requestId = ++marketLoadSeqRef.current;
       marketRefreshInFlightRef.current = true;
@@ -540,12 +567,12 @@ export default function MarketPage() {
 
         if (!infoResult.ok) {
           setLastRpcError(infoResult.error);
-          return marketExists || createdMarketSession != null;
+          return marketExistsRef.current || createdMarketSessionRef.current != null;
         }
 
         const info = infoResult.value;
         if (!info) {
-          return marketExists || createdMarketSession != null;
+          return marketExistsRef.current || createdMarketSessionRef.current != null;
         }
 
         if (!info.owner.equals(PROGRAM_ID)) return false;
@@ -562,7 +589,7 @@ export default function MarketPage() {
         }
 
         setLastRpcError(fetchResult.error);
-        return marketExists || createdMarketSession != null;
+        return marketExistsRef.current || createdMarketSessionRef.current != null;
       } finally {
         if (requestId === marketLoadSeqRef.current) {
           setIsLoadingMarket(false);
@@ -572,7 +599,7 @@ export default function MarketPage() {
         }
       }
     },
-    [connection, applyMarketAccount, marketExists, createdMarketSession]
+    [connection, applyMarketAccount]
   );
 
   const confirmCreatedMarketOpen = useCallback(
@@ -619,7 +646,7 @@ export default function MarketPage() {
         return fetchMarketOnce(targetMarketPk, createSig === "manual-refresh" ? "manual refresh" : "create confirmed");
       }
 
-      if (!program) return false;
+      if (!programRef.current) return false;
 
       const isManualRefresh = createSig === "manual-refresh";
       const pollId = ++marketLoadSeqRef.current;
@@ -635,7 +662,7 @@ export default function MarketPage() {
         await sleep(POLL_AFTER_CREATE_DELAYS_MS[attempt]);
 
         const found = await fetchMarketOnce(targetMarketPk, `poll attempt ${attempt + 1}`);
-        if (found && marketExists) return true;
+        if (found && marketExistsRef.current) return true;
       }
 
       if (!isManualRefresh) {
@@ -646,7 +673,7 @@ export default function MarketPage() {
       setMarketAwaitingRpc(true);
       return false;
     },
-    [program, fetchMarketOnce, confirmCreatedMarketOpen, marketExists]
+    [fetchMarketOnce, confirmCreatedMarketOpen]
   );
 
   const refreshMarketState = useCallback(
@@ -669,12 +696,22 @@ export default function MarketPage() {
 
   refreshMarketStateRef.current = refreshMarketState;
 
+  const activeMarketPkStr = activeMarketPk?.toBase58() ?? null;
+  const marketWinningSide = marketState?.winningSide ?? null;
+
   useEffect(() => {
-    fetchMintAuthority(connection, mint).then(setMintAuthorityPk);
+    let cancelled = false;
+    fetchMintAuthority(connection, mint).then((pk) => {
+      if (cancelled || !pk) return;
+      setMintAuthorityPk((prev) => (prev?.equals(pk) ? prev : pk));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [connection, mint]);
 
   useEffect(() => {
-    const nextPk = wallet.publicKey?.toBase58() ?? null;
+    const nextPk = walletPublicKey?.toBase58() ?? null;
     if (nextPk === prevWalletPkRef.current) return;
 
     prevWalletPkRef.current = nextPk;
@@ -689,7 +726,7 @@ export default function MarketPage() {
     console.debug("wallet changed → refresh trader state only");
     refreshUsdcBalanceRef.current("wallet changed");
     refreshPositionRef.current("wallet changed");
-  }, [wallet.publicKey]);
+  }, [walletPublicKey]);
 
   useEffect(() => {
     if (!marketPk) {
@@ -704,9 +741,7 @@ export default function MarketPage() {
       setIsLoadingMarket(false);
       setIsLoadingPools(false);
       setIsLoadingReceipt(false);
-      return;
     }
-    marketInitFetchedForPkRef.current = null;
   }, [marketPk]);
 
   useEffect(() => {
@@ -716,6 +751,14 @@ export default function MarketPage() {
     marketInitFetchedForPkRef.current = pkStr;
     refreshMarketStateRef.current("initial market load");
   }, [marketPk, programReady, readyFreshMarket]);
+
+  useEffect(() => {
+    if (!activeMarketPkStr || readyFreshMarket || !programReady) return;
+    const id = window.setInterval(() => {
+      refreshMarketStateRef.current("interval poll (10s)");
+    }, MARKET_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [activeMarketPkStr, readyFreshMarket, programReady]);
 
   useEffect(() => {
     const requestId = ++proofLoadSeqRef.current;
@@ -736,20 +779,43 @@ export default function MarketPage() {
   }, []);
 
   useEffect(() => {
-    if (!marketPk || !marketState || marketState.winningSide === 0 || !proofPreview) {
-      if (!marketState || marketState.winningSide === 0) {
-        setReceipt(null);
-      }
+    if (
+      !activeMarketPkStr ||
+      marketWinningSide === null ||
+      marketWinningSide === 0 ||
+      !proofPreview
+    ) {
+      setReceipt((prev) => (prev === null ? prev : null));
+      setIsLoadingReceipt((prev) => (prev ? false : prev));
+      return;
+    }
+
+    const requestId = ++receiptLoadSeqRef.current;
+    setIsLoadingReceipt((prev) => (prev ? prev : true));
+
+    const marketPkForReceipt = new PublicKey(activeMarketPkStr);
+    const built = buildReceiptFromMarket(marketWinningSide, marketPkForReceipt);
+    if (requestId !== receiptLoadSeqRef.current) return;
+
+    if (!built) {
+      setReceipt((prev) => (prev === null ? prev : null));
       setIsLoadingReceipt(false);
       return;
     }
-    const requestId = ++receiptLoadSeqRef.current;
-    setIsLoadingReceipt(true);
-    const built = buildReceiptFromMarket(marketState.winningSide, activeMarketPk ?? marketPk!);
-    if (requestId !== receiptLoadSeqRef.current) return;
-    setReceipt(built);
+
+    setReceipt((prev) => {
+      if (
+        prev &&
+        prev.winningSide === built.winningSide &&
+        prev.settleTx === built.settleTx &&
+        prev.rootsPda.equals(built.rootsPda)
+      ) {
+        return prev;
+      }
+      return built;
+    });
     setIsLoadingReceipt(false);
-  }, [activeMarketPk, marketPk, marketState, proofPreview, buildReceiptFromMarket]);
+  }, [activeMarketPkStr, marketWinningSide, proofPreview, buildReceiptFromMarket]);
 
   const poolOverDisplay =
     readyFreshMarket && !frozenSnapshot && !marketExists && !createdMarketSession
@@ -847,10 +913,6 @@ export default function MarketPage() {
     if (isLoadingProof) return "Loading TxLINE proof…";
     return "Create market unavailable";
   })();
-
-  useEffect(() => {
-    console.debug("[Create market]", createInputs, { canCreateMarket, createDisabledReason });
-  }, [canCreateMarket, createDisabledReason]);
 
   async function ensureUserAta(): Promise<PublicKey> {
     if (!wallet.publicKey) throw new Error("Connect wallet");

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { config as dotenvConfig } from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -64,7 +65,18 @@ function txlineDevProxyPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), txlineDevProxyPlugin()],
+  plugins: [
+    nodePolyfills({
+      include: ["buffer", "process"],
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+    }),
+    react(),
+    txlineDevProxyPlugin(),
+  ],
   define: {
     global: "globalThis",
   },
