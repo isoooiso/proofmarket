@@ -1,12 +1,6 @@
-export default async function handler(req: any, res: any) {
-  function json(status: number, body: any) {
-    res.statusCode = status;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(body));
-  }
-
-  if (req.method !== "GET") {
-    return json(405, { error: "Method not allowed" });
+export default async function handler(request, response) {
+  if (request.method !== "GET") {
+    return response.status(405).json({ error: "Method not allowed" });
   }
 
   const base = process.env.TXLINE_API_BASE || "https://txline-dev.txodds.com/api";
@@ -14,15 +8,15 @@ export default async function handler(req: any, res: any) {
   const apiToken = process.env.TXLINE_API_TOKEN;
 
   if (!jwt || !apiToken) {
-    return json(500, {
+    return response.status(500).json({
       error: "Missing TxLINE environment variables",
       required: ["TXLINE_JWT", "TXLINE_API_TOKEN"],
       hasJwt: Boolean(jwt),
-      hasApiToken: Boolean(apiToken),
+      hasApiToken: Boolean(apiToken)
     });
   }
 
-  const query = req.query || {};
+  const query = request.query || {};
   const params = new URLSearchParams();
 
   for (const key of ["fixtureId", "seq", "statKey", "statKey2"]) {
@@ -36,10 +30,10 @@ export default async function handler(req: any, res: any) {
   }
 
   if (!params.get("fixtureId") || !params.get("seq") || !params.get("statKey")) {
-    return json(400, {
+    return response.status(400).json({
       error: "Missing required query params",
       required: ["fixtureId", "seq", "statKey"],
-      optional: ["statKey2"],
+      optional: ["statKey2"]
     });
   }
 
@@ -51,20 +45,20 @@ export default async function handler(req: any, res: any) {
       headers: {
         Authorization: `Bearer ${jwt}`,
         "X-Api-Token": apiToken,
-        Accept: "application/json",
-      },
+        Accept: "application/json"
+      }
     });
 
     const contentType = upstream.headers.get("content-type") || "application/json";
     const body = await upstream.text();
 
-    res.statusCode = upstream.status;
-    res.setHeader("Content-Type", contentType);
-    res.end(body);
-  } catch (error: any) {
-    return json(500, {
+    response.status(upstream.status);
+    response.setHeader("content-type", contentType);
+    return response.send(body);
+  } catch (error) {
+    return response.status(500).json({
       error: "TxLINE proxy failed",
-      message: error?.message || String(error),
+      message: error?.message || String(error)
     });
   }
 }
